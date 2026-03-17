@@ -1,0 +1,104 @@
+% -*- mode: latex; -*- mustache tags: {{=« »=}} «! the '&' below prevents HTML escaping. »
+\documentclass[10pt,twoside,english]{_support/latex/sbabook/sbabook}
+\let\wholebook=\relax
+
+\usepackage{import}
+\subimport{_support/latex/}{common.tex}
+
+%=================================================================
+% Debug packages for page layout and overfull lines
+% Remove the showtrims document option before printing
+\ifshowtrims
+  \usepackage{showframe}
+  \usepackage[color=magenta,width=5mm]{_support/latex/overcolored}
+\fi
+
+
+% =================================================================
+\title{«& title»}
+\author{«& attribution»}
+\series{«& series»}
+
+\hypersetup{
+  pdftitle = {«& title»},
+  pdfauthor = {«& attribution»},
+  pdfkeywords = {«& keywords»}
+}
+
+
+% =================================================================
+\begin{document}
+
+% Title page and colophon on verso
+\maketitle
+\pagestyle{titlingpage}
+\thispagestyle{titlingpage} % \pagestyle does not work on the first one…
+
+\cleartoverso
+{\small
+
+  Copyright 2023-2025 by «& attribution».
+
+  The contents of this book are protected under the Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International licence.
+
+  \textbf{You are free to}:
+  \begin{itemize}
+  \item [\textbf{Share}] --- copy and redistribute the material in any medium or format.
+  \end{itemize}
+
+  Under the following terms:
+  \begin{description}
+  \item[\textbf{Attribution}] --- You must give appropriate credit , provide a link to the license, and indicate if changes were made . You may do so in any reasonable manner, but not in any way that suggests the licensor endorses you or your use. 
+  \item[\textbf{NonCommercial}] --- You may not use the material for commercial purposes.
+  \item[\textbf{NoDerivatives}] --- If you remix, transform, or build upon the material, you may not distribute the modified material.  
+  \end{description}
+
+  \textbf{No additional restrictions} --- You may not apply legal terms or technological measures that legally restrict others from doing anything the license permits.
+
+  For any reuse or distribution, you must make clear to others the
+  license terms of this work. The best way to do this is with a link to
+  this web page: \\
+  \url{https://creativecommons.org/licenses/by-nc-nd/4.0/}
+
+  Any of the above conditions can be waived if you get permission from
+  the copyright holder. Nothing in this license impairs or restricts the
+  author's moral rights.
+
+  \begin{center}
+    \includegraphics[width=0.2\textwidth]{_support/latex/sbabook/ccbyncnd}
+  \end{center}
+
+  Your fair dealing and other rights are in no way affected by the
+  above. This is a human-readable summary of the Legal Code (the full
+  license): \\
+  \url{https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode.en}
+
+  \vfill
+
+  % Publication info would go here (publisher, ISBN, cover design…)
+  Layout and typography based on the \textcode{sbabook} \LaTeX{} class by Damien
+  Pollet.
+}
+
+
+\frontmatter
+\pagestyle{plain}
+
+\tableofcontents*
+\clearpage\listoffigures
+
+\mainmatter
+
+«& content»
+
+
+%\bibliographystyle{alpha}
+%\bibliography{«& bibFile»}
+
+% lulu requires an empty page at the end. That's why I'm using
+% \backmatter here.
+\backmatter
+
+% Index would go here
+
+\end{document}

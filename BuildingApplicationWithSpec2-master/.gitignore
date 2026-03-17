@@ -1,0 +1,12 @@
+**/*.DS_Store
+
+*.xcworkspace
+/Pharo.*
+/pharo
+/pharo-ui
+/pillar
+/mustache
+/pharo-vm/
+/build/
+_result
+*.synctex.*

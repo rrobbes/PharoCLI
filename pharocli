@@ -1,0 +1,786 @@
+#!/bin/bash
+
+# PharoCLI bash wrapper - programmatic access to Pharo image via command line
+
+show_help() {
+    cat << 'EOF'
+PharoCLI - Command-line interface to Pharo image inspection
+
+USAGE:
+  pharocli [OPTIONS] COMMAND [ARGUMENTS...]
+
+OPTIONS:
+  -p, --port PORT         Port number for Pharo image (default: 4044)
+  -h, --help             Show this help message
+
+COMMANDS:
+
+  packages               List all top-level packages
+
+  packages classes PACKAGES...
+                        List classes in specified packages
+                        Example: pharocli packages classes Kernel Collections-Abstract
+
+  packages sub PACKAGES...
+                        List sub-packages of specified top-level packages
+                        Example: pharocli packages sub Spec2 NewTools
+
+  packages extended PACKAGE
+                        Get classes extended by a package
+                        Example: pharocli packages extended Ring-Core
+
+  packages extensions PACKAGE
+                        Get extension methods in a package
+                        Example: pharocli packages extensions Ring-Core
+
+  protocols CLASSES...   Get protocols in specified classes
+                        Example: pharocli protocols Object String
+
+  protocols CLASSES... --extensions-only
+                        Get only extension protocols (marked with *)
+
+  protocols CLASSES... --without-extensions
+                        Get only local protocols (exclude extensions)
+
+  methods CLASSES...     Get all methods in specified classes
+                        Example: pharocli methods Object String
+
+  methods CLASSES... --protocols PROTOCOLS...
+                        Get methods in specified protocols
+                        Example: pharocli methods Object --protocols accessing printing
+
+  implementors SELECTOR  Find all implementors of a selector
+                        Example: pharocli implementors yourself
+
+  implementors SELECTOR --in-package PACKAGE
+                        Restrict to specific package
+                        Example: pharocli implementors yourself --in-package Kernel
+
+  implementors SELECTOR --in-packages PACKAGES...
+                        Restrict to multiple packages
+                        Example: pharocli implementors yourself --in-packages Kernel Collections
+
+  senders SELECTOR       Find all senders of a selector
+                        Example: pharocli senders class
+
+  senders SELECTOR --in-package PACKAGE
+                        Restrict to specific package
+
+  senders SELECTOR --in-packages PACKAGES...
+                        Restrict to multiple packages
+
+  source CLASS>> METHOD  Get source code of a single method
+                        Example: pharocli source "Object>> yourself"
+
+  sources CLASS>> METHOD [CLASS>> METHOD...]
+                        Get source code of multiple methods
+                        Example: pharocli sources "Object>> yourself" "String>> size"
+
+  info CLASS>> METHOD    Get detailed information about a method
+                        Example: pharocli info "Object>> yourself"
+
+  infos CLASS>> METHOD [CLASS>> METHOD...]
+                        Get detailed information about multiple methods
+                        Example: pharocli infos "Object>> yourself" "String>> size"
+
+  create package NAME    Create a new package
+                        Example: pharocli create package My-Package
+
+  create class NAME --in-package PACKAGE
+                        Create a new class in a package
+                        Example: pharocli create class MyClass --in-package My-Package
+
+  lastModified CLASS>> METHOD
+                        Get when a method was last modified
+                        Example: pharocli lastModified "Object>> yourself"
+
+  recentChanges PACKAGE [LIMIT]
+                        List recently modified methods in a package
+                        Example: pharocli recentChanges Kernel 10
+
+  hierarchy CLASS        Show class hierarchy (superclass and subclasses)
+                        Example: pharocli hierarchy String
+
+  comment CLASS          Get class documentation/comment
+                        Example: pharocli comment String
+
+  variables CLASS        List instance/class variables and slots
+                        Example: pharocli variables Point
+
+  instvar CLASS VARIABLE List methods accessing an instance variable
+                        Example: pharocli instvar Point x
+
+  references CLASS       Find all methods that reference a class
+                        Example: pharocli references String
+
+  references CLASS --in-package PACKAGE
+                        Restrict to specific package
+                        Example: pharocli references String --in-package Kernel
+
+  references CLASS --in-packages PACKAGES...
+                        Restrict to multiple packages
+                        Example: pharocli references Object --in-packages Kernel Collections
+
+  search KEYWORD         Search for methods by keyword
+                        Example: pharocli search "cache"
+
+  search KEYWORD --in-packages PACKAGES...
+                        Search in specific packages
+                        Example: pharocli search "cache" --in-packages Kernel Collections
+
+  search KEYWORD --in-classes CLASSES...
+                        Search in specific classes
+                        Example: pharocli search "size" --in-classes String Array
+
+  search KEYWORD --fields FIELDS...
+                        Search in specific fields (names, source, comment)
+                        Default: all fields
+                        Example: pharocli search "cache" --fields names source
+
+  search KEYWORD --case-sensitive
+                        Perform case-sensitive search (default: case-insensitive)
+
+  OUTPUT:
+  All commands output line-by-line for easy piping and grepping
+
+EXAMPLES:
+   pharocli --port 4044 packages
+   pharocli -p 4044 packages classes Kernel | grep -i collection
+   pharocli packages sub Spec2 NewTools
+   pharocli protocols Object --without-extensions
+   pharocli protocols Object String --extensions-only
+   pharocli methods Object --protocols accessing
+   pharocli implementors yourself --in-package Kernel
+   pharocli senders yourself --in-packages Kernel Collections
+   pharocli source "Object>> yourself"
+   pharocli sources "Object>> yourself" "String>> size"
+   pharocli info "Object>> yourself"
+   pharocli infos "Object>> yourself" "String>> size"
+   pharocli search "yourself"
+   pharocli search "yourself" --in-packages Kernel
+   pharocli search "size" --in-classes String Array
+   pharocli search "at" --fields names | wc -l
+   pharocli references String
+   pharocli references Object --in-package Kernel
+   pharocli references String --in-packages Kernel Collections | head -10
+
+EOF
+}
+
+# Default port
+PORT=4044
+
+# Parse global options
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -p|--port)
+            PORT="$2"
+            shift 2
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# Check if command is provided
+if [[ $# -eq 0 ]]; then
+    echo "Error: No command specified" >&2
+    echo "Use 'pharocli --help' for usage information" >&2
+    exit 1
+fi
+
+COMMAND=$1
+shift
+
+# Convert multiple arguments to Smalltalk array syntax
+build_array() {
+    local -a items=("$@")
+    printf "{"
+    for i in "${!items[@]}"; do
+        if [[ $i -gt 0 ]]; then
+            printf ". "
+        fi
+        # If item looks like a selector (contains >>), it's a method reference
+        if [[ "$items[$i]" == *">>"* ]]; then
+            printf "%s" "${items[$i]}"
+        else
+            printf "#'%s'" "${items[$i]}"
+        fi
+    done
+    printf "}"
+}
+
+# Execute Smalltalk code on Pharo image
+execute_pharo() {
+    echo "$1" | nc localhost "$PORT" | sed "s/^'//; s/'$//" | sed 's/\r\r/\n\n/g; s/\r/\n/g'
+}
+
+# Main command processing
+case "$COMMAND" in
+    packages)
+        if [[ $# -eq 0 ]]; then
+            # List all top-level packages
+            execute_pharo "PharoCLI topLevelPackagesString"
+        else
+            SUBCOMMAND=$1
+            shift
+            case "$SUBCOMMAND" in
+                classes)
+                    if [[ $# -eq 0 ]]; then
+                        echo "Error: packages classes requires at least one package" >&2
+                        exit 1
+                    fi
+                    PACKAGES=$(build_array "$@")
+                    execute_pharo "PharoCLI classesInPackagesString: $PACKAGES"
+                    ;;
+                sub)
+                    if [[ $# -eq 0 ]]; then
+                        echo "Error: packages sub requires at least one package" >&2
+                        exit 1
+                    fi
+                    PACKAGES=$(build_array "$@")
+                    execute_pharo "PharoCLI subPackagesOfString: $PACKAGES"
+                    ;;
+                extended)
+                    if [[ $# -ne 1 ]]; then
+                        echo "Error: packages extended requires exactly one package" >&2
+                        exit 1
+                    fi
+                    execute_pharo "PharoCLI extendedClassesInPackageString: '$1'"
+                    ;;
+                extensions)
+                    if [[ $# -ne 1 ]]; then
+                        echo "Error: packages extensions requires exactly one package" >&2
+                        exit 1
+                    fi
+                    execute_pharo "PharoCLI extensionMethodsInPackageString: '$1'"
+                    ;;
+                *)
+                    echo "Error: Unknown packages subcommand: $SUBCOMMAND" >&2
+                    exit 1
+                    ;;
+            esac
+        fi
+        ;;
+    protocols)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: protocols requires at least one class" >&2
+            exit 1
+        fi
+
+        CLASSES=()
+        EXTENSIONS_ONLY=false
+        WITHOUT_EXTENSIONS=false
+
+        # Parse arguments
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --extensions-only)
+                    EXTENSIONS_ONLY=true
+                    shift
+                    ;;
+                --without-extensions)
+                    WITHOUT_EXTENSIONS=true
+                    shift
+                    ;;
+                *)
+                    CLASSES+=("$1")
+                    shift
+                    ;;
+            esac
+        done
+
+        if [[ ${#CLASSES[@]} -eq 0 ]]; then
+            echo "Error: protocols requires at least one class" >&2
+            exit 1
+        fi
+
+        # Convert class names to class objects
+        CLASSES_SMALLTALK="{"
+        first=true
+        for class in "${CLASSES[@]}"; do
+            if [[ "$first" == false ]]; then
+                CLASSES_SMALLTALK="$CLASSES_SMALLTALK. "
+            fi
+            CLASSES_SMALLTALK="$CLASSES_SMALLTALK(Smalltalk at: #$class)"
+            first=false
+        done
+        CLASSES_SMALLTALK="$CLASSES_SMALLTALK}"
+
+        if [[ "$EXTENSIONS_ONLY" == true ]]; then
+            execute_pharo "PharoCLI protocolsInClassesString: $CLASSES_SMALLTALK extensionsOnly: true"
+        elif [[ "$WITHOUT_EXTENSIONS" == true ]]; then
+            execute_pharo "PharoCLI protocolsInClassesString: $CLASSES_SMALLTALK withoutExtensions: true"
+        else
+            execute_pharo "PharoCLI protocolsInClassesString: $CLASSES_SMALLTALK"
+        fi
+        ;;
+    methods)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: methods requires at least one class" >&2
+            exit 1
+        fi
+
+        CLASSES=()
+        PROTOCOLS=()
+
+        # Parse arguments
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --protocols)
+                    shift
+                    while [[ $# -gt 0 ]] && [[ "$1" != -* ]]; do
+                        PROTOCOLS+=("$1")
+                        shift
+                    done
+                    ;;
+                *)
+                    CLASSES+=("$1")
+                    shift
+                    ;;
+            esac
+        done
+
+        if [[ ${#CLASSES[@]} -eq 0 ]]; then
+            echo "Error: methods requires at least one class" >&2
+            exit 1
+        fi
+
+        # Convert class names to class objects
+        CLASSES_SMALLTALK="{"
+        first=true
+        for class in "${CLASSES[@]}"; do
+            if [[ "$first" == false ]]; then
+                CLASSES_SMALLTALK="$CLASSES_SMALLTALK. "
+            fi
+            CLASSES_SMALLTALK="$CLASSES_SMALLTALK(Smalltalk at: #$class)"
+            first=false
+        done
+        CLASSES_SMALLTALK="$CLASSES_SMALLTALK}"
+
+        # Build protocols array
+        PROTOCOLS_SMALLTALK="#("
+        first=true
+        for protocol in "${PROTOCOLS[@]}"; do
+            if [[ "$first" == false ]]; then
+                PROTOCOLS_SMALLTALK="$PROTOCOLS_SMALLTALK "
+            fi
+            PROTOCOLS_SMALLTALK="$PROTOCOLS_SMALLTALK$protocol"
+            first=false
+        done
+        PROTOCOLS_SMALLTALK="$PROTOCOLS_SMALLTALK)"
+
+        if [[ ${#PROTOCOLS[@]} -gt 0 ]]; then
+            execute_pharo "PharoCLI methodsInClassesString: $CLASSES_SMALLTALK protocols: $PROTOCOLS_SMALLTALK"
+        else
+            execute_pharo "PharoCLI methodsInClassesString: $CLASSES_SMALLTALK protocols: #()"
+        fi
+        ;;
+    implementors)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: implementors requires a selector" >&2
+            exit 1
+        fi
+
+        SELECTOR=$1
+        shift
+
+        IN_PACKAGE=""
+        IN_PACKAGES=()
+
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --in-package)
+                    IN_PACKAGE="$2"
+                    shift 2
+                    ;;
+                --in-packages)
+                    shift
+                    while [[ $# -gt 0 ]] && [[ "$1" != -* ]]; do
+                        IN_PACKAGES+=("$1")
+                        shift
+                    done
+                    ;;
+                *)
+                    shift
+                    ;;
+            esac
+        done
+
+        if [[ -n "$IN_PACKAGE" ]]; then
+            execute_pharo "PharoCLI implementorsOfString: #$SELECTOR inPackage: '$IN_PACKAGE'"
+        elif [[ ${#IN_PACKAGES[@]} -gt 0 ]]; then
+            PACKAGES=$(build_array "${IN_PACKAGES[@]}")
+            execute_pharo "PharoCLI implementorsOfString: #$SELECTOR inPackages: $PACKAGES"
+        else
+            execute_pharo "PharoCLI implementorsOfString: #$SELECTOR"
+        fi
+        ;;
+    senders)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: senders requires a selector" >&2
+            exit 1
+        fi
+
+        SELECTOR=$1
+        shift
+
+        IN_PACKAGE=""
+        IN_PACKAGES=()
+
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --in-package)
+                    IN_PACKAGE="$2"
+                    shift 2
+                    ;;
+                --in-packages)
+                    shift
+                    while [[ $# -gt 0 ]] && [[ "$1" != -* ]]; do
+                        IN_PACKAGES+=("$1")
+                        shift
+                    done
+                    ;;
+                *)
+                    shift
+                    ;;
+            esac
+        done
+
+        if [[ -n "$IN_PACKAGE" ]]; then
+            execute_pharo "PharoCLI sendersOfString: #$SELECTOR inPackage: '$IN_PACKAGE'"
+        elif [[ ${#IN_PACKAGES[@]} -gt 0 ]]; then
+            PACKAGES=$(build_array "${IN_PACKAGES[@]}")
+            execute_pharo "PharoCLI sendersOfString: #$SELECTOR inPackages: $PACKAGES"
+        else
+            execute_pharo "PharoCLI sendersOfString: #$SELECTOR"
+        fi
+        ;;
+    source)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: source requires a method reference (ClassName>> methodName)" >&2
+            exit 1
+        fi
+
+        METHOD_REF=$1
+
+        # Parse method reference: ClassName>> methodName (handle with/without spaces)
+        CLASS_NAME="${METHOD_REF%%>>*}"
+        METHOD_NAME="${METHOD_REF##*>>}"
+        METHOD_NAME="${METHOD_NAME## }"  # Remove leading spaces
+        METHOD_NAME="${METHOD_NAME%% }"  # Remove trailing spaces
+
+        execute_pharo "PharoCLI sourceOfMethodFormatted: ((Smalltalk at: #$CLASS_NAME) >> #$METHOD_NAME)"
+        ;;
+    sources)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: sources requires at least one method reference (ClassName>> methodName)" >&2
+            exit 1
+        fi
+
+        METHODS_CODE="{"
+        first=true
+        for method_ref in "$@"; do
+            if [[ "$first" == false ]]; then
+                METHODS_CODE="$METHODS_CODE. "
+            fi
+
+            # Parse method reference: ClassName>> methodName (handle with/without spaces)
+            CLASS_NAME="${method_ref%%>>*}"
+            METHOD_NAME="${method_ref##*>>}"
+            METHOD_NAME="${METHOD_NAME## }"  # Remove leading spaces
+            METHOD_NAME="${METHOD_NAME%% }"  # Remove trailing spaces
+
+            METHODS_CODE="$METHODS_CODE((Smalltalk at: #$CLASS_NAME) >> #$METHOD_NAME)"
+            first=false
+        done
+        METHODS_CODE="$METHODS_CODE}"
+
+        execute_pharo "PharoCLI sourceOfMethodsFormatted: $METHODS_CODE"
+        ;;
+    info)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: info requires a method reference (ClassName>> methodName)" >&2
+            exit 1
+        fi
+
+        METHOD_REF=$1
+
+        # Parse method reference: ClassName>> methodName (handle with/without spaces)
+        CLASS_NAME="${METHOD_REF%%>>*}"
+        METHOD_NAME="${METHOD_REF##*>>}"
+        METHOD_NAME="${METHOD_NAME## }"  # Remove leading spaces
+        METHOD_NAME="${METHOD_NAME%% }"  # Remove trailing spaces
+
+        execute_pharo "PharoCLI methodInfoString: ((Smalltalk at: #$CLASS_NAME) >> #$METHOD_NAME)"
+        ;;
+    infos)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: infos requires at least one method reference (ClassName>> methodName)" >&2
+            exit 1
+        fi
+
+        METHODS_CODE="{"
+        first=true
+        for method_ref in "$@"; do
+            if [[ "$first" == false ]]; then
+                METHODS_CODE="$METHODS_CODE. "
+            fi
+
+            # Parse method reference: ClassName>> methodName (handle with/without spaces)
+            CLASS_NAME="${method_ref%%>>*}"
+            METHOD_NAME="${method_ref##*>>}"
+            METHOD_NAME="${METHOD_NAME## }"  # Remove leading spaces
+            METHOD_NAME="${METHOD_NAME%% }"  # Remove trailing spaces
+
+            METHODS_CODE="$METHODS_CODE((Smalltalk at: #$CLASS_NAME) >> #$METHOD_NAME)"
+            first=false
+        done
+        METHODS_CODE="$METHODS_CODE}"
+
+        execute_pharo "PharoCLI methodsInfoString: $METHODS_CODE"
+        ;;
+    create)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: create requires a subcommand (package or class)" >&2
+            exit 1
+        fi
+
+        SUBCOMMAND=$1
+        shift
+
+        case "$SUBCOMMAND" in
+            package)
+                if [[ $# -ne 1 ]]; then
+                    echo "Error: create package requires exactly one package name" >&2
+                    exit 1
+                fi
+                execute_pharo "PharoCLI createPackageNamed: '$1'"
+                ;;
+            class)
+                if [[ $# -lt 1 ]]; then
+                    echo "Error: create class requires a class name and --in-package" >&2
+                    exit 1
+                fi
+
+                CLASS_NAME=$1
+                shift
+                PACKAGE=""
+
+                while [[ $# -gt 0 ]]; do
+                    case "$1" in
+                        --in-package)
+                            PACKAGE="$2"
+                            shift 2
+                            ;;
+                        *)
+                            shift
+                            ;;
+                    esac
+                done
+
+                if [[ -z "$PACKAGE" ]]; then
+                    echo "Error: create class requires --in-package" >&2
+                    exit 1
+                fi
+
+                execute_pharo "PharoCLI createClassNamed: '$CLASS_NAME' inPackage: '$PACKAGE'"
+                ;;
+            *)
+                echo "Error: Unknown create subcommand: $SUBCOMMAND" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+    lastModified)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: lastModified requires a method reference (ClassName>> methodName)" >&2
+            exit 1
+        fi
+
+        METHOD_REF=$1
+
+        # Parse method reference: ClassName>> methodName (handle with/without spaces)
+        CLASS_NAME="${METHOD_REF%%>>*}"
+        METHOD_NAME="${METHOD_REF##*>>}"
+        METHOD_NAME="${METHOD_NAME## }"  # Remove leading spaces
+        METHOD_NAME="${METHOD_NAME%% }"  # Remove trailing spaces
+
+        execute_pharo "PharoCLI lastModifiedOf: ((Smalltalk at: #$CLASS_NAME) >> #$METHOD_NAME)"
+        ;;
+    recentChanges)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: recentChanges requires a package name" >&2
+            exit 1
+        fi
+
+        PACKAGE=$1
+        LIMIT=${2:-10}  # Default to 10 if not specified
+
+        execute_pharo "PharoCLI recentChangesInPackageString: '$PACKAGE' limit: $LIMIT"
+        ;;
+    hierarchy)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: hierarchy requires a class name" >&2
+            exit 1
+        fi
+
+        CLASS_NAME=$1
+
+        execute_pharo "PharoCLI hierarchyOfString: (Smalltalk at: #$CLASS_NAME)"
+        ;;
+    comment)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: comment requires a class name" >&2
+            exit 1
+        fi
+
+        CLASS_NAME=$1
+
+        execute_pharo "PharoCLI commentOfString: (Smalltalk at: #$CLASS_NAME)"
+        ;;
+    variables)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: variables requires a class name" >&2
+            exit 1
+        fi
+
+        CLASS_NAME=$1
+
+        execute_pharo "PharoCLI variablesOfString: (Smalltalk at: #$CLASS_NAME)"
+        ;;
+    instvar)
+        if [[ $# -lt 2 ]]; then
+            echo "Error: instvar requires a class name and variable name" >&2
+            exit 1
+        fi
+
+        CLASS_NAME=$1
+        VAR_NAME=$2
+
+        execute_pharo "PharoCLI referencesToInstanceVariableString: #$VAR_NAME inClass: #$CLASS_NAME"
+        ;;
+    references)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: references requires a class name" >&2
+            exit 1
+        fi
+
+        CLASS_NAME=$1
+        shift
+
+        IN_PACKAGE=""
+        IN_PACKAGES=()
+
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --in-package)
+                    IN_PACKAGE="$2"
+                    shift 2
+                    ;;
+                --in-packages)
+                    shift
+                    while [[ $# -gt 0 ]] && [[ "$1" != -* ]]; do
+                        IN_PACKAGES+=("$1")
+                        shift
+                    done
+                    ;;
+                *)
+                    shift
+                    ;;
+            esac
+        done
+
+        if [[ -n "$IN_PACKAGE" ]]; then
+            execute_pharo "PharoCLI referencesOfString: #$CLASS_NAME inPackage: '$IN_PACKAGE'"
+        elif [[ ${#IN_PACKAGES[@]} -gt 0 ]]; then
+            PACKAGES=$(build_array "${IN_PACKAGES[@]}")
+            execute_pharo "PharoCLI referencesOfString: #$CLASS_NAME inPackages: $PACKAGES"
+        else
+            execute_pharo "PharoCLI referencesOfString: #$CLASS_NAME"
+        fi
+        ;;
+    search)
+        if [[ $# -eq 0 ]]; then
+            echo "Error: search requires a keyword" >&2
+            exit 1
+        fi
+
+        KEYWORD=$1
+        shift
+
+        IN_PACKAGES=()
+        IN_CLASSES=()
+        SEARCH_FIELDS=()
+        CASE_SENSITIVE=false
+
+        # Parse options
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --in-packages)
+                    shift
+                    while [[ $# -gt 0 ]] && [[ "$1" != -* ]]; do
+                        IN_PACKAGES+=("$1")
+                        shift
+                    done
+                    ;;
+                --in-classes)
+                    shift
+                    while [[ $# -gt 0 ]] && [[ "$1" != -* ]]; do
+                        IN_CLASSES+=("$1")
+                        shift
+                    done
+                    ;;
+                --fields)
+                    shift
+                    while [[ $# -gt 0 ]] && [[ "$1" != -* ]]; do
+                        SEARCH_FIELDS+=("$1")
+                        shift
+                    done
+                    ;;
+                --case-sensitive)
+                    CASE_SENSITIVE=true
+                    shift
+                    ;;
+                *)
+                    shift
+                    ;;
+            esac
+        done
+
+        # Build packages array (nil if empty)
+        if [[ ${#IN_PACKAGES[@]} -eq 0 ]]; then
+            PACKAGES_CODE="nil"
+        else
+            PACKAGES_CODE=$(build_array "${IN_PACKAGES[@]}")
+        fi
+
+        # Build classes array (nil if empty)
+        if [[ ${#IN_CLASSES[@]} -eq 0 ]]; then
+            CLASSES_CODE="nil"
+        else
+            # Convert class names to symbols for later lookup
+            CLASSES_CODE=$(build_array "${IN_CLASSES[@]}")
+        fi
+
+        # Build fields array (default: names, source, comment)
+        if [[ ${#SEARCH_FIELDS[@]} -eq 0 ]]; then
+            FIELDS_CODE="#(names source comment)"
+        else
+            FIELDS_CODE=$(build_array "${SEARCH_FIELDS[@]}")
+        fi
+
+        # Execute search
+        execute_pharo "PharoCLI searchForString: '$KEYWORD' inPackages: $PACKAGES_CODE inClasses: $CLASSES_CODE searchFields: $FIELDS_CODE caseSensitive: $CASE_SENSITIVE"
+        ;;
+    *)
+        echo "Error: Unknown command: $COMMAND" >&2
+        echo "Use 'pharocli --help' for usage information" >&2
+        exit 1
+        ;;
+    esac
