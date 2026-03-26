@@ -1,0 +1,1 @@
+Object << #PharoCLI	slots: {};	package: 'PharoCLI'
