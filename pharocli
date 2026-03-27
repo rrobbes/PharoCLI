@@ -140,6 +140,27 @@ COMMANDS:
   search KEYWORD --case-sensitive
                         Perform case-sensitive search (default: case-insensitive)
 
+  debugger stack         Show all debugger stack frames with source code and highlighting
+                       Example: pharocli debugger stack
+
+  debugger stack INDICES...
+                       Show specific debugger stack frames (space-separated indices)
+                       Example: pharocli debugger stack 1 2 5
+
+  debugger vars          Show all debugger stack frames with variables only (no source code)
+                       Example: pharocli debugger vars
+
+  debugger vars INDICES...
+                       Show specific debugger stack frames with variables (space-separated indices)
+                       Example: pharocli debugger vars 1 2 5
+
+  inspect tree EXPRESSION [DEPTH]
+                       Inspect object structure as a tree (requires quoted expression)
+                       EXPRESSION: Smalltalk code to evaluate
+                       DEPTH: 1-5 (default: 3)
+                       Example: pharocli inspect tree "Point x: 10 y: 20"
+                       Example: pharocli inspect tree "Dictionary new at: 'a' put: 1; yourself" 2
+
   OUTPUT:
   All commands output line-by-line for easy piping and grepping
 
@@ -272,11 +293,11 @@ case "$COMMAND" in
             echo "Error: protocols requires at least one class" >&2
             exit 1
         fi
-
+    
         CLASSES=()
         EXTENSIONS_ONLY=false
         WITHOUT_EXTENSIONS=false
-
+    
         # Parse arguments
         while [[ $# -gt 0 ]]; do
             case "$1" in
@@ -294,12 +315,12 @@ case "$COMMAND" in
                     ;;
             esac
         done
-
+    
         if [[ ${#CLASSES[@]} -eq 0 ]]; then
             echo "Error: protocols requires at least one class" >&2
             exit 1
         fi
-
+    
         # Convert class names to class objects
         CLASSES_SMALLTALK="{"
         first=true
@@ -307,7 +328,7 @@ case "$COMMAND" in
             if [[ "$first" == false ]]; then
                 CLASSES_SMALLTALK="$CLASSES_SMALLTALK. "
             fi
-            CLASSES_SMALLTALK="$CLASSES_SMALLTALK(Smalltalk at: #$class)"
+            CLASSES_SMALLTALK="$CLASSES_SMALLTALK(PharoCLI classFromName: '$class')"
             first=false
         done
         CLASSES_SMALLTALK="$CLASSES_SMALLTALK}"
@@ -358,7 +379,7 @@ case "$COMMAND" in
             if [[ "$first" == false ]]; then
                 CLASSES_SMALLTALK="$CLASSES_SMALLTALK. "
             fi
-            CLASSES_SMALLTALK="$CLASSES_SMALLTALK(Smalltalk at: #$class)"
+            CLASSES_SMALLTALK="$CLASSES_SMALLTALK(PharoCLI classFromName: '$class')"
             first=false
         done
         CLASSES_SMALLTALK="$CLASSES_SMALLTALK}"
@@ -475,7 +496,7 @@ case "$COMMAND" in
         METHOD_NAME="${METHOD_NAME## }"  # Remove leading spaces
         METHOD_NAME="${METHOD_NAME%% }"  # Remove trailing spaces
 
-        execute_pharo "PharoCLI sourceOfMethodFormatted: ((Smalltalk at: #$CLASS_NAME) >> #$METHOD_NAME)"
+        execute_pharo "PharoCLI sourceOfMethodFormatted: ((PharoCLI classFromName: '$CLASS_NAME') >> #$METHOD_NAME)"
         ;;
     sources)
         if [[ $# -eq 0 ]]; then
@@ -496,12 +517,12 @@ case "$COMMAND" in
             METHOD_NAME="${METHOD_NAME## }"  # Remove leading spaces
             METHOD_NAME="${METHOD_NAME%% }"  # Remove trailing spaces
 
-            METHODS_CODE="$METHODS_CODE((Smalltalk at: #$CLASS_NAME) >> #$METHOD_NAME)"
-            first=false
-        done
-        METHODS_CODE="$METHODS_CODE}"
-
-        execute_pharo "PharoCLI sourceOfMethodsFormatted: $METHODS_CODE"
+            METHODS_CODE="$METHODS_CODE((PharoCLI classFromName: '$CLASS_NAME') >> #$METHOD_NAME)"
+             first=false
+            done
+            METHODS_CODE="$METHODS_CODE}"
+            
+            execute_pharo "PharoCLI sourceOfMethodsFormatted: $METHODS_CODE"
         ;;
     info)
         if [[ $# -eq 0 ]]; then
@@ -517,7 +538,7 @@ case "$COMMAND" in
         METHOD_NAME="${METHOD_NAME## }"  # Remove leading spaces
         METHOD_NAME="${METHOD_NAME%% }"  # Remove trailing spaces
 
-        execute_pharo "PharoCLI methodInfoString: ((Smalltalk at: #$CLASS_NAME) >> #$METHOD_NAME)"
+        execute_pharo "PharoCLI methodInfoString: ((PharoCLI classFromName: '$CLASS_NAME') >> #$METHOD_NAME)"
         ;;
     infos)
         if [[ $# -eq 0 ]]; then
@@ -538,12 +559,12 @@ case "$COMMAND" in
             METHOD_NAME="${METHOD_NAME## }"  # Remove leading spaces
             METHOD_NAME="${METHOD_NAME%% }"  # Remove trailing spaces
 
-            METHODS_CODE="$METHODS_CODE((Smalltalk at: #$CLASS_NAME) >> #$METHOD_NAME)"
-            first=false
-        done
-        METHODS_CODE="$METHODS_CODE}"
-
-        execute_pharo "PharoCLI methodsInfoString: $METHODS_CODE"
+            METHODS_CODE="$METHODS_CODE((PharoCLI classFromName: '$CLASS_NAME') >> #$METHOD_NAME)"
+             first=false
+            done
+            METHODS_CODE="$METHODS_CODE}"
+            
+            execute_pharo "PharoCLI methodsInfoString: $METHODS_CODE"
         ;;
     create)
         if [[ $# -eq 0 ]]; then
@@ -611,7 +632,7 @@ case "$COMMAND" in
         METHOD_NAME="${METHOD_NAME## }"  # Remove leading spaces
         METHOD_NAME="${METHOD_NAME%% }"  # Remove trailing spaces
 
-        execute_pharo "PharoCLI lastModifiedOf: ((Smalltalk at: #$CLASS_NAME) >> #$METHOD_NAME)"
+        execute_pharo "PharoCLI lastModifiedOf: ((PharoCLI classFromName: '$CLASS_NAME') >> #$METHOD_NAME)"
         ;;
     recentChanges)
         if [[ $# -eq 0 ]]; then
@@ -632,7 +653,7 @@ case "$COMMAND" in
 
         CLASS_NAME=$1
 
-        execute_pharo "PharoCLI hierarchyOfString: (Smalltalk at: #$CLASS_NAME)"
+        execute_pharo "PharoCLI hierarchyOfString: (PharoCLI classFromName: '$CLASS_NAME')"
         ;;
     comment)
         if [[ $# -eq 0 ]]; then
@@ -642,7 +663,7 @@ case "$COMMAND" in
 
         CLASS_NAME=$1
 
-        execute_pharo "PharoCLI commentOfString: (Smalltalk at: #$CLASS_NAME)"
+        execute_pharo "PharoCLI commentOfString: (PharoCLI classFromName: '$CLASS_NAME')"
         ;;
     variables)
         if [[ $# -eq 0 ]]; then
@@ -652,7 +673,7 @@ case "$COMMAND" in
 
         CLASS_NAME=$1
 
-        execute_pharo "PharoCLI variablesOfString: (Smalltalk at: #$CLASS_NAME)"
+        execute_pharo "PharoCLI variablesOfString: (PharoCLI classFromName: '$CLASS_NAME')"
         ;;
     instvar)
         if [[ $# -lt 2 ]]; then
@@ -778,9 +799,105 @@ case "$COMMAND" in
         # Execute search
         execute_pharo "PharoCLI searchForString: '$KEYWORD' inPackages: $PACKAGES_CODE inClasses: $CLASSES_CODE searchFields: $FIELDS_CODE caseSensitive: $CASE_SENSITIVE"
         ;;
-    *)
-        echo "Error: Unknown command: $COMMAND" >&2
-        echo "Use 'pharocli --help' for usage information" >&2
-        exit 1
-        ;;
-    esac
+        debugger)
+            if [[ $# -eq 0 ]]; then
+                echo "Error: debugger requires a subcommand (stack)" >&2
+                exit 1
+            fi
+
+            SUBCOMMAND=$1
+            shift
+
+            case "$SUBCOMMAND" in
+                stack)
+                    if [[ $# -eq 0 ]]; then
+                        # Show all stack frames
+                        execute_pharo "PharoCLI debuggerStackSourceString"
+                    else
+                        # Show specific frames - build array of integers (not symbols)
+                        INDICES_CODE="{"
+                        FIRST=true
+                        for idx in "$@"; do
+                            if [[ ! $FIRST == true ]]; then
+                                INDICES_CODE="$INDICES_CODE. "
+                            fi
+                            INDICES_CODE="$INDICES_CODE$idx"
+                            FIRST=false
+                        done
+                        INDICES_CODE="$INDICES_CODE}"
+                        execute_pharo "PharoCLI debuggerStackSourceString: $INDICES_CODE"
+                    fi
+                    ;;
+                vars)
+                    if [[ $# -eq 0 ]]; then
+                        # Show all stack frames with variables only
+                        execute_pharo "PharoCLI debuggerStackVariablesString"
+                    else
+                        # Show specific frames with variables - build array of integers
+                        INDICES_CODE="{"
+                        FIRST=true
+                        for idx in "$@"; do
+                            if [[ ! $FIRST == true ]]; then
+                                INDICES_CODE="$INDICES_CODE. "
+                            fi
+                            INDICES_CODE="$INDICES_CODE$idx"
+                            FIRST=false
+                        done
+                        INDICES_CODE="$INDICES_CODE}"
+                        execute_pharo "PharoCLI debuggerStackVariablesString: $INDICES_CODE"
+                    fi
+                    ;;
+                *)
+                    echo "Error: Unknown debugger subcommand: $SUBCOMMAND" >&2
+                    exit 1
+                    ;;
+            esac
+            ;;
+        inspect)
+            if [[ $# -eq 0 ]]; then
+                echo "Error: inspect requires a subcommand (tree)" >&2
+                exit 1
+            fi
+
+            SUBCOMMAND=$1
+            shift
+
+            case "$SUBCOMMAND" in
+                tree)
+                    if [[ $# -lt 1 ]]; then
+                        echo "Error: inspect tree requires EXPRESSION and optional DEPTH (1-5)" >&2
+                        echo "Example: pharocli inspect tree \"Point x: 10 y: 20\"" >&2
+                        echo "Example: pharocli inspect tree \"Dictionary new at: 'a' put: 1; yourself\" 2" >&2
+                        exit 1
+                    fi
+
+                    # Get the expression (first non-numeric argument) and depth (last numeric argument)
+                    EXPRESSION=$1
+                    shift
+                    
+                    # Check if remaining argument is a valid depth
+                    DEPTH=3  # Default
+                    if [[ $# -gt 0 ]] && [[ "$1" =~ ^[0-9]+$ ]]; then
+                        DEPTH=$1
+                    fi
+
+                    # Validate depth
+                    if [[ "$DEPTH" -lt 1 ]] || [[ "$DEPTH" -gt 5 ]]; then
+                        echo "Error: DEPTH must be a number between 1 and 5" >&2
+                        exit 1
+                    fi
+
+                    execute_pharo "PharoCLI objectTreeString: ($EXPRESSION) depth: $DEPTH"
+                    ;;
+                *)
+                    echo "Error: Unknown inspect subcommand: $SUBCOMMAND" >&2
+                    exit 1
+                    ;;
+            esac
+            ;;
+        *)
+            echo "Error: Unknown command: $COMMAND" >&2
+            echo "Use 'pharocli --help' for usage information" >&2
+            exit 1
+            ;;
+        esac
