@@ -1,4 +1,25 @@
-*.bak
-*.sav
-*.pharo-version
+# External projects - not part of PharoCLI
+BuildingApplicationWithSpec2-master/
+Sindarin-Scriptable-Debugger-main/
+old/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# OS
 .DS_Store
+*.zip
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Test/build artifacts
+.coverage
+htmlcov/
