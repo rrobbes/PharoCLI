@@ -1,0 +1,4 @@
+*.bak
+*.sav
+*.pharo-version
+.DS_Store
