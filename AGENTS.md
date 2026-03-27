@@ -8,22 +8,50 @@ We are working in a Pharo image with Smalltalk code evaluation via netcat on por
 echo "3 + 4" | nc localhost 4044
 ```
 
-## PharoCLI
+## PharoCLI (Python Version)
 
-A bash script providing command-line interface to Pharo image inspection. Located at: `pharocli`
+A Python CLI for inspecting and navigating Pharo image code. Located at: `pharocli.py`
+
+**Usage:**
+```bash
+python3 pharocli.py [command] [options]
+# Or with alias: pharocli [command] [options]
+```
 
 **Key documentation:**
-- `PHAROCLI-DOCUMENTATION.md` - Full user guide with examples
-- `PHAROCLI-GUIDE.md` - Original PharoCLI class reference (Pharo side)
-- `PHAROCLI-FUTURE-FEATURES.md` - Planned features and backlog
+- `PHAROCLI-PYTHON-USAGE.md` - Full usage guide with examples and bash integration
+- `PHAROCLI-GUIDE.md` - Pharo-side PharoCLI class reference
+- `pharocli-python-bugs.md` - Known issues and fixes applied
+- `PHAROCLI-DOCUMENTATION.md` - Original bash version (deprecated, for reference only)
 
 **Quick reference:**
 ```bash
 pharocli packages                                # List packages
 pharocli methods Object --protocols accessing    # Find methods
-pharocli implementors yourself                   # Find implementations
-pharocli recentChanges Kernel 10                 # See recent changes
-pharocli source "Object>> yourself"              # View source (requires quotes)
+pharocli implementors yourself                   # Find implementations (with package filters)
+pharocli source "Object>> yourself"              # View source (works with operators!)
+pharocli source "Integer>> +"                    # Operator methods supported
+pharocli info "Object>> yourself"                # Method info
+pharocli search test --in-packages Kernel       # Search with filters
+pharocli hierarchy Object                        # Show class hierarchy
+pharocli references Object --in-package Kernel  # Find references
+pharocli debugger stack                          # Show debugger stack
+pharocli inspect tree "Point x: 10 y: 20" 2     # Object tree inspection
+```
+
+**Bash integration examples:**
+```bash
+# Find methods and filter results
+pharocli methods Object | grep "as"
+
+# Count implementors in a package
+pharocli implementors yourself --in-package Kernel | wc -l
+
+# Search and extract data
+pharocli search test | grep -E "^\w+>>" | sort | uniq
+
+# Chain with other tools
+pharocli implementors "+" --in-packages Kernel | sed 's/>>.*//' | sort | uniq
 ```
 
 ## Development Approach
