@@ -23,19 +23,3 @@ __pycache__/
 # Test/build artifacts
 .coverage
 htmlcov/
-
-# Temporary/exploratory files
-PHAROCLI-CLI-PROPOSAL.md
-PHAROCLI-FIXES-SUMMARY.md
-PHAROCLI-FUTURE-FEATURES.md
-*-temp.st
-pharo-image-interaction.md
-pharo-snippets.md
-class-browser-code.st
-WhiskerBrowser.st
-WhiskersAtLast/
-pharo-cli.st
-PharoCLI.st
-PharoCLI-updated.st
-yourself
-launch-cli.sh
